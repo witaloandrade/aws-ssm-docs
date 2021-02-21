@@ -1,0 +1,143 @@
+{
+    "schemaVersion": "2.2",
+    "description": "Manage Snow Cloud Agent on EC2 instances",
+    "parameters": {
+      "AgentLocationWindows": {
+        "type": "String",
+        "default": "https://xyz.s3.amazonaws.com/snow/windows/snowagent-6.5.0.x64.msi",
+        "description": "(Optional) Enter FQDN or full path of Windows Snow Cloud Agent Installer's location"
+      },
+      "AgentLocationDebian": {
+        "type": "String",
+        "default": "https://xyz.s3.amazonaws.com/snow/linux/snowagent-sios_6.2.2-1_amd64.deb",
+        "description": "(Optional) Enter FQDN or full path of Debian Snow Cloud Agent Installer's location"
+      },
+      "AgentLocationRPM": {
+        "type": "String",
+        "default": "https://xyz.s3.amazonaws.com/snow/linux/snowagent-sios-6.2.2-1.x86_64.rpm",
+        "description": "(Optional) Enter FQDN or full path of RPM Snow Cloud Agent Installer's location"
+      }
+    },
+    "mainSteps": [
+      {
+        "precondition": {
+          "StringEquals": [
+            "platformType",
+            "Linux"
+          ]
+        },
+        "action": "aws:runShellScript",
+        "name": "InstallSnowCloudAgentOnLinux",
+        "inputs": {
+          "id": "0.aws:runShellScript",
+          "timeoutSeconds": 600,
+          "runCommand": [
+            "#!/bin/bash",
+            "#set -eux",
+            "#Check Whether the Snow Cloud Agent is already installed",
+            "if [[ ! -f /opt/snow/snowagent ]];",
+            "then",
+            "     # Check whether curl or wget is present in the system",
+            "     if hash curl 2>/dev/null",
+            "     then",
+            "         DOWNLOAD_CMD=\"curl -s --fail --retry 5 --max-time 30\"",
+            "         CONSOLE_ARG=\"\"",
+            "         TO_FILE_ARG=\" -o \"",
+            "         HEADER_ARG=\" --head \"",
+            "     else",
+            "         DOWNLOAD_CMD=\"wget --quiet --tries=5 --timeout=30 \"",
+            "         CONSOLE_ARG=\" -qO- \"",
+            "         TO_FILE_ARG=\" -O \"",
+            "         HEADER_ARG=\" -S --spider \"",
+            "     fi",
+            "     # Check whether the OS is Debian or RPM based Linux and set the download location",
+            "     os=$( grep -Ei 'debian|buntu|mint' /etc/*release )",
+            "     if [[ -n \"$os\" || -f \"/etc/debian_version\" ]];",
+            "     then",
+            "         INSTALLER_FILE_URL={{ AgentLocationDebian }}",
+            "         opersys=\"DEB\"",
+            "     else",
+            "         INSTALLER_FILE_URL={{ AgentLocationRPM }}",
+            "         opersys=\"RPM\"",
+            "     fi",
+            "     Downloadfile()",
+            "     {",
+            "         ${DOWNLOAD_CMD} ${TO_FILE_ARG} snow-cloud-agent.x86_64 ${INSTALLER_FILE_URL}",
+            "         if [[ $? != 0 ]];",
+            "         then",
+            "             echo \"Failed to download installer from ${INSTALLER_FILE_URL}\"",
+            "             exit 3",
+            "         fi",
+            "     }",
+            "     # Checks whether agent location is a FQDN or full path and invoke download or copy function ",
+            "     if [[ -n \"$INSTALLER_FILE_URL\" ]]; ",
+            "     then",
+            "         if [[ \"${INSTALLER_FILE_URL:0:4}\" == 'http' ]] ; ",
+            "         then",
+            "                 Downloadfile",
+            "         else",
+            "             cp $INSTALLER_FILE_URL snow-cloud-agent.x86_64 ",
+            "         fi",
+            "     else",
+            "         echo \"No installation path specified for snow Cloud Agent\"",
+            "             exit 4",
+            "     fi",
+            "     if [ \"$opersys\" = \"RPM\" ];",
+            "     then",
+            "                 sleep 5",
+            "                 sudo rpm -ivh snow-cloud-agent.x86_64",
+            "                 sleep 5",
+            "     else",
+            "         sudo dpkg --install snow-cloud-agent.x86_64",
+            "         sleep 5",
+            "     fi",
+            "else",
+            "echo \"snow is already installed\"",
+            "fi"
+          ]
+        }
+      },
+      {
+        "precondition": {
+          "StringEquals": [
+            "platformType",
+            "Windows"
+          ]
+        },
+        "action": "aws:runPowerShellScript",
+        "name": "InstallSnowCloudAgentOnWindows",
+        "inputs": {
+          "id": "0.aws:runPowerShellScript",
+          "timeoutSeconds": 600,
+          "runCommand": [
+            "$service = Get-Service | where {($_.Name -like \"snow*\")-and ($_.Status -eq \"Running\")}",
+            "if ( $service.Length -ne \"1\"){",
+            "    $download_dir = \"c:\\temp\"",
+            "    $agent_url='{{ AgentLocationWindows }}'",
+            "    [Net.ServicePointManager]::SecurityProtocol = \"tls12, tls11, tls\"",
+            "    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}",
+            "    mkdir \"$download_dir\" -ErrorAction SilentlyContinue",
+            "    Set-Location \"$download_dir\"",
+            "    $wc = New-Object System.Net.WebClient",
+            "    $wc.DownloadFile(\"$agent_url\", \"${download_dir}/snowagent-6.5.0.x64.msi\")",
+            "    $command_arguments = \"/quiet /i snowagent-6.5.0.x64.msi\"",
+            "    Start-Process \"msiexec.exe\" $command_arguments -NoNewWindow -Wait",
+            "        If ($?) {",
+            "            \"SNOW agent installed successfully\"",
+            "            exit 0",
+            "                }",
+            "        else {",
+            "            \"There was a problem while installing SNOW agent.\"",
+            "            exit 1",
+            "             }",
+            "}",
+            "else {",
+            "    \"SNOW agent already installed\"",
+            "    Get-Service -Name *snow* -ErrorAction SilentlyContinue | FL",
+            "    exit 0",
+            "}"
+          ]
+        }
+      }
+    ]
+  }

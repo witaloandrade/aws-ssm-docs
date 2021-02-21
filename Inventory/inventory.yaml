@@ -1,0 +1,67 @@
+---
+    schemaVersion: '2.2'
+    description: Inventory Before Patching
+    mainSteps:
+    - precondition:
+        StringEquals:
+          - platformType
+          - Linux
+      action: aws:runShellScript
+      name: LinuxInventoryBeforePatching
+      inputs:
+        id: 0.aws:runShellScript
+        timeoutSeconds: 600
+        runCommand:
+          - 'hostname'
+          - 'date'
+          - 'df -h'
+          - 'yum updateinfo'
+          - 'yum updateinfo list'
+          - 'yum list installed'
+          - 'mount'
+          - 'ps aux'
+          - 'netstat -pultan'
+          - 'ip a'
+          - 'route -n'
+          - 'cat /etc/resolv.conf'
+    - precondition:
+        StringEquals:
+        - platformType
+        - Windows
+      action: aws:runPowerShellScript
+      name: WindowsInventoryBeforePatching
+      inputs:
+        id: 0.aws:runPowerShellScript
+        timeoutSeconds: 600
+        runCommand:
+          - 'hostname'
+          - 'Get-Date'
+          - '(Get-WmiObject -class Win32_OperatingSystem).Caption'
+          - 'whoami'
+          - 'systeminfo /FO LIST'
+          - 'net share'
+          - 'net view'
+          - 'Get-SmbShare'
+          - 'net Users'
+          - 'net localgroup Administrators'
+          - 'net accounts'
+          - 'Get-Service'
+          - 'Get-Disk'
+          - 'Get-HotFix | Sort-Object -Property InstalledOn -Descending'
+          - 'wmic product get name'
+          - 'netstat -ab'
+          - 'Get-process'
+          - 'ipconfig -all'
+          - 'route print'
+          - 'Get-NetIPInterface'
+          - 'Get-NetIPConfiguration'
+          - 'Get-NetIPAddress'
+          - 'Get-DnsClient'
+          - 'Get-DnsClientServerAddress'
+          - 'tasklist'
+          - 'Get-CimInstance -Class Win32_LogicalDisk -Filter "DriveType=3"'
+          - "Get-CimInstance Win32_OperatingSystem |  FL *"
+          - 'tnc'
+          - 'Test-NetConnection -ComputerName www.catalog.update.microsoft.com'
+          - 'wget microsoft.com | findstr.exe StatusCode'
+          - 'Get-NetFirewallProfile'

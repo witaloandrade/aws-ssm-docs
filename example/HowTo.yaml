@@ -1,0 +1,40 @@
+---
+schemaVersion: "2.2"
+description: ""
+parameters:
+  SiteToResolve:
+    type: "String"
+    default: "aws.amazon.com"
+    description: "Site to resolve dns name"
+mainSteps:
+- precondition:
+    StringEquals:
+    - "platformType"
+    - "Linux"
+  action: "aws:runShellScript"
+  name: "InstallQualysCloudAgentOnLinux"
+  inputs:
+    id: "0.aws:runShellScript"
+    timeoutSeconds: 600
+    runCommand:
+    - "#!/bin/bash"
+    - "host {{ SiteToResolve }}"
+    - "#End every line with comma"
+    - "#Need quotation marks on every line"
+    - "mount -l"
+    - "#Dont not need comma on last line"
+- precondition:
+    StringEquals:
+    - "platformType"
+    - "Windows"
+  action: "aws:runPowerShellScript"
+  name: "InstallQualysCloudAgentOnWindows"
+  inputs:
+    id: "0.aws:runPowerShellScript"
+    timeoutSeconds: 600
+    runCommand:
+    - "tnc {{SiteToResolve}}"
+    - "Write-Host \"You have to scape quotation marks\""
+    - "Write-Host \"You have to scape back slash\""
+    - "Set-Location -Path \"C:\\Windows\\Temp\""
+    - "Get-ChildItem -Path \"C:\\Windows\""

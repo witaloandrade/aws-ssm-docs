@@ -1,0 +1,119 @@
+---
+schemaVersion: '2.2'
+description: Splunk Install and registration
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Linux
+  action: aws:runShellScript
+  name: SplunkInstallandRegisterLinux
+  inputs:
+    id: 0.aws:runShellScript
+    timeoutSeconds: 600
+    runCommand:
+      - '#!/bin/bash'
+      - '#set -eux'
+      - '# Install the base Splunk Forwarder application for Linux Servers'
+      - 'echo "Checking if Instance Is Splunk Server"'
+      - 'if [ -d /opt/splunk/etc/ ]'
+      - 'then'
+      - 'echo "file /opt/splunk/etc/ exists. SPLUNK SERVER FOUND, task will exit"'
+      - 'exit 0'
+      - 'else'
+      - 'echo "Proceed  Splunk application"'
+      - 'fi'
+      - '#Check Whether the splunk Cloud Agent is already installed'
+      - 'sudo service splunk status'
+      - 'if [[ $? = 0 ]]; then'
+      - 'echo "splunk already installed"'
+      - 'cat "/opt/splunkforwarder/etc/system/local/deploymentclient.conf"'
+      - 'exit 0'
+      - 'else'
+      - '# Check whether curl or wget is present in the system"'
+      - 'cd /opt/'
+      - 'os=$( grep -Ei "debian|buntu|mint" /etc/*release )'
+      - 'if [[ -n "$os" || -f "/etc/debian_version" ]]'
+      - 'then'
+      - 'echo "Downloading forwarder"'
+      - 'sudo wget -nv -O splunkforwarder-latest.deb "https://splunk-universal-forwarder.s3.amazonaws.com/splunkforwarder-latest.deb"'
+      - 'if [[ $? != 0 ]]; then'
+      - 'echo "Failed to Download Installer"'
+      - 'exit 1'
+      - 'fi'
+      - 'sudo dpkg -i splunkforwarder-latest.deb'
+      - 'else'
+      - 'echo "Downloading forwarder"'
+      - 'sudo wget -nv -O splunkforwarder-latest.rpm "https://s3.amazonaws.com/splunk-universal-forwarder/splunkforwarder-latest.rpm"'
+      - 'if [[ $? != 0 ]]; then'
+      - 'echo "Failed to Download Installer"'
+      - 'exit 1'
+      - 'fi'
+      - 'sudo rpm -ivh splunkforwarder-latest.rpm'
+      - 'fi'
+      - 'echo "Install/write user-seed.conf, file is destructively consumed after subsequent restart of splunkd"'
+      - 'sudo touch "/opt/splunkforwarder/etc/system/local/user-seed.conf"'
+      - 'sudo cat << EOF | tee /opt/splunkforwarder/etc/system/local/user-seed.conf'
+      - '[user_info]'
+      - 'USERNAME = admin'
+      - 'PASSWORD = Pa55w0rd'
+      - 'EOF'
+      - 'echo "Install/write deploymentclient.conf this wires splunk up to the global Deployment Server"'
+      - 'sudo touch "/opt/splunkforwarder/etc/system/local/deploymentclient.conf"'
+      - 'sudo cat << EOF | tee /opt/splunkforwarder/etc/system/local/deploymentclient.conf'
+      - '[target-broker:deploymentServer]'
+      - 'targetUri = splunk-master.com:8089'
+      - 'EOF'
+      - 'echo "accept license and start"'
+      - 'sudo /opt/splunkforwarder/bin/splunk start --accept-license --answer-yes --no-prompt'
+      - 'echo "Install splunkd boot up script, must enter password specified in user-seed.conf"'
+      - 'sudo /opt/splunkforwarder/bin/splunk enable boot-start'
+      - 'sleep 5'
+      - 'echo "Check to see if install was successful"'
+      - 'sudo service splunk restart'
+      - 'sudo service splunk status'
+      - 'fi'
+- precondition:
+    StringEquals:
+    - platformType
+    - Windows
+  action: aws:runPowerShellScript
+  name: SplunkInstallandRegisterWindows
+  onFailure: Abort
+  inputs:
+    id: 0.aws:runPowerShellScript
+    timeoutSeconds: 600
+    runCommand:
+        - '$configfile = "C:\Program Files\SplunkUniversalForwarder\etc\system\local\deploymentclient.conf"'
+        - 'if(Get-Service -Name SplunkForwarder 2> $null)'
+        - '    {   '
+        - '        Write-Output "SplunkForwarder already installed."'
+        - '        Write-Output "Checking config File Existence"'
+        - '        If (Test-Path -Path $configfile )'
+        - '            {'
+        - '                get-Content $configfile'
+        - '            }'
+        - '        Else'
+        - '            {'
+        - '                Write-Host "Config File Does NOT Exist Adding File"'
+        - '                "[target-broker:deploymentServer]" | Add-Content $configfile'
+        - '                "targetUri = splunk-master.com:8089" | Add-Content $configfile'
+        - '                get-Content $configfile'
+        - '                Write-Host "Restarting Service"'
+        - '                Restart-Service -Name *splunk*'
+        - '            }'
+        - '    }'
+        - 'else {'
+        - '    Write-Host "Missing Splunk Agent, Agent will be installed"'
+        - '    $agent_url="https://xyz.s3.amazonaws.com/splunk/splunkforwarder-8.0.6-152fb4b2bb96-x64-release.msi"'
+        - '    $download_dir = "c:\temp"'
+        - '    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"'
+        - '    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}'
+        - '    $wc = New-Object System.Net.WebClient'
+        - '    $wc.DownloadFile("$agent_url", "${download_dir}/splunkforwarder.msi")'
+        - '    msiexec.exe /i C:\Temp\splunkforwarder.msi DEPLOYMENT_SERVER="splunk-master.com:8089" AGREETOLICENSE=Yes SERVICESTARTTYPE=auto SPLUNKPASSWORD="Pa55w0rd" LAUNCHSPLUNK=1 /quiet'
+        - '    sleep 60'
+        - '    get-Content $configfile'
+        - '    Get-Service -Name *splunk*'
+        - '}'
+    description: Install Splunk and register EC2 Windows instance
